@@ -492,23 +492,18 @@ def test_complete_feed_content_through_public_api(field: str) -> None:
 
 
 @pytest.mark.parametrize("field", ["rss-description", "atom-content"])
-def test_deep_xml_body_uses_rendering_fallback(field: str) -> None:
+def test_deep_xml_body_converts(field: str) -> None:
     payload = "<div>" * 500 + "Deep <b>body</b>." + "</div>" * 500
     feed = _feed_with_body(field, payload, atom_type="xhtml")
     stream_info = StreamInfo(extension=".rss" if field.startswith("rss-") else ".atom")
     original_limit = sys.getrecursionlimit()
     try:
         sys.setrecursionlimit(200)
-        with pytest.warns(UserWarning, match="too deeply nested"):
-            result = RssConverter().convert(io.BytesIO(feed), stream_info)
-        with pytest.raises(RecursionError):
-            RssConverter().convert(io.BytesIO(feed), stream_info, strict=True)
+        result = RssConverter().convert(io.BytesIO(feed), stream_info)
     finally:
         sys.setrecursionlimit(original_limit)
 
-    assert "Deep" in result.markdown
-    assert "body" in result.markdown
-    assert "<div>" not in result.markdown
+    assert result.markdown.endswith("Deep **body**.")
 
 
 def test_rss_content_namespace_alias_and_field_ownership() -> None:

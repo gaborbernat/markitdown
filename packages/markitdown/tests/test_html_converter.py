@@ -1,10 +1,8 @@
 import io
 
 import pytest
-from bs4 import BeautifulSoup
 
 from markitdown import MarkItDown
-from markitdown.converters._markdownify import _CustomMarkdownify
 
 
 def _convert_html(html: str, **kwargs) -> str:
@@ -14,15 +12,6 @@ def _convert_html(html: str, **kwargs) -> str:
         **kwargs,
     )
     return result.markdown
-
-
-@pytest.mark.parametrize(
-    "whitespace", ["", " ", "  ", "\t", "\n", "\r\n", "\u00a0", " \t\n\u00a0 "]
-)
-def test_underline_preserves_whitespace_verbatim(whitespace: str) -> None:
-    element = BeautifulSoup("<u></u>", "html.parser").u
-
-    assert _CustomMarkdownify().convert_u(element, whitespace) == whitespace
 
 
 @pytest.mark.parametrize(

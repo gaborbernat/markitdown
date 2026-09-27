@@ -523,9 +523,8 @@ K</strike>L.</p>
             "Runs D ~~E~~ F.",
             # An empty element contributes nothing
             "Empty GH.",
-            # A line break inside the element is kept, and the markup
-            # survives it because strikethrough may span a single newline
-            "Newline I~~J\nK~~L.",
+            # A newline in the source is whitespace, so it collapses to a space
+            "Newline I~~J K~~L.",
             "Break M~~N\nO~~P.",
         ]
     )
@@ -950,13 +949,13 @@ def test_pptx_chart_multi_series_conversion() -> None:
     assert "| C10 | 10.0 | 20.0 |" in md
 
 
-def test_deeply_nested_html_fallback() -> None:
-    """Large, deeply nested HTML should fall back to plain-text extraction
-    instead of silently returning unconverted HTML (issue #1636).
+def test_deeply_nested_html_converts() -> None:
+    """Large, deeply nested HTML should convert to markdown rather than
+    returning unconverted HTML (issue #1636).
 
-    Note: This test uses sys.setrecursionlimit to guarantee a RecursionError
-    regardless of the host environment's default limit, making it deterministic
-    across different platforms and CI configurations.
+    Note: This test uses sys.setrecursionlimit so that a converter walking the
+    tree with Python recursion fails regardless of the host environment's
+    default limit, making it deterministic across platforms.
     """
     import sys
     import warnings
@@ -966,9 +965,8 @@ def test_deeply_nested_html_fallback() -> None:
     # Use a small recursion limit so the test is environment-independent.
     # We restore the original limit in a finally block to avoid side-effects.
     original_limit = sys.getrecursionlimit()
-    low_limit = 200  # well below markdownify's traversal depth for depth=500
+    low_limit = 200
 
-    # Build HTML with nesting deep enough to trigger RecursionError
     depth = 500
     html = "<html><body>"
     for _ in range(depth):
@@ -980,35 +978,26 @@ def test_deeply_nested_html_fallback() -> None:
 
     try:
         sys.setrecursionlimit(low_limit)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
             result = markitdown.convert_stream(
                 io.BytesIO(html.encode("utf-8")),
                 file_extension=".html",
             )
-
-            # Should have emitted a warning about the fallback
-            recursion_warnings = [x for x in w if "deeply nested" in str(x.message)]
-            assert len(recursion_warnings) > 0
-
     finally:
         sys.setrecursionlimit(original_limit)
 
-    # The output should contain the text content, not raw HTML
-    assert "Deep content" in result.markdown
-    assert "bold text" in result.markdown
-    assert "<div" not in result.markdown
-    assert "<p>" not in result.markdown
+    assert result.markdown == "Deep content with **bold text**"
 
 
-def test_deeply_nested_rss_item_fallback() -> None:
-    """Deeply nested HTML inside an RSS item should fall back to plain-text
-    extraction instead of silently embedding raw unconverted HTML in the
-    markdown output (same failure class as the HTML converter fix in #1644).
+def test_deeply_nested_rss_item_converts() -> None:
+    """Deeply nested HTML inside an RSS item should convert to markdown
+    instead of embedding raw unconverted HTML in the output (same failure
+    class as the HTML converter fix in #1644).
 
-    Note: This test uses sys.setrecursionlimit to guarantee a RecursionError
-    regardless of the host environment's default limit, making it deterministic
-    across different platforms and CI configurations.
+    Note: This test uses sys.setrecursionlimit so that a converter walking the
+    tree with Python recursion fails regardless of the host environment's
+    default limit, making it deterministic across platforms.
     """
     import sys
     import warnings
@@ -1018,7 +1007,7 @@ def test_deeply_nested_rss_item_fallback() -> None:
     # Use a small recursion limit so the test is environment-independent.
     # We restore the original limit in a finally block to avoid side-effects.
     original_limit = sys.getrecursionlimit()
-    low_limit = 200  # well below markdownify's traversal depth for depth=500
+    low_limit = 200
 
     # Build an RSS item whose content is deeply nested HTML
     depth = 500
@@ -1056,39 +1045,23 @@ def test_deeply_nested_rss_item_fallback() -> None:
 
     try:
         sys.setrecursionlimit(low_limit)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = markitdown.convert_stream(
-                io.BytesIO(rss.encode("utf-8")),
-                file_extension=".rss",
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            rss_result = RssConverter().convert(
+                io.BytesIO(rss.encode("utf-8")), StreamInfo(extension=".rss")
             )
-
-            # Should have emitted a warning about the fallback
-            recursion_warnings = [x for x in w if "deeply nested" in str(x.message)]
-            assert len(recursion_warnings) > 0
-
-        # strict=True should expose the conversion failure rather than applying
-        # the plain-text fallback.
-        with pytest.raises(RecursionError):
-            RssConverter().convert(
-                io.BytesIO(rss.encode("utf-8")),
-                StreamInfo(extension=".rss"),
-                strict=True,
-            )
-        with pytest.raises(RecursionError):
-            RssConverter().convert(
-                io.BytesIO(atom.encode("utf-8")),
-                StreamInfo(extension=".atom"),
-                strict=True,
+            atom_result = RssConverter().convert(
+                io.BytesIO(atom.encode("utf-8")), StreamInfo(extension=".atom")
             )
     finally:
         sys.setrecursionlimit(original_limit)
 
-    # The output should contain the text content, not raw HTML
-    assert "Deep feed content" in result.markdown
-    assert "bold text" in result.markdown
-    assert "<div" not in result.markdown
-    assert "<p>" not in result.markdown
+    assert rss_result.markdown.endswith(
+        "## Deep Item\nDeep feed content with **bold text**"
+    )
+    assert atom_result.markdown.endswith(
+        "## Deep Entry\nDeep feed content with **bold text**"
+    )
 
 
 @pytest.mark.skipif(
