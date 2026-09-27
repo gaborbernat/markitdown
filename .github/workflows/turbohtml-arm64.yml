@@ -16,23 +16,23 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
-      - name: Download main source distribution
+      - name: Download source distribution
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run download 36330087916 --repo tox-dev/turbohtml --name dist-sdist --dir sdist
+        run: gh run download 36331826065 --repo tox-dev/turbohtml --name dist-sdist --dir sdist
       - name: Install source distribution with default compiler discovery
         run: |
           python -c "import platform, sys; print(platform.machine(), sys.version)"
           $sdist = (Get-ChildItem sdist/*.tar.gz).FullName
-          python -m pip install --verbose --no-cache-dir --config-settings=setup-args=-Dvsenv=true $sdist
+          python -m pip install --verbose --no-cache-dir $sdist
       - name: Install markitdown
         run: |
+          python -c "from pathlib import Path; path = Path('packages/markitdown/pyproject.toml'); path.write_text(path.read_text().replace('turbohtml>=1.10.0', 'turbohtml>=1.10.0.dev0'))"
           python -m pip install "./packages/markitdown[all]" ./packages/markitdown-ocr pytest openai
-          $sdist = (Get-ChildItem sdist/*.tar.gz).FullName
-          python -m pip install --verbose --no-cache-dir --config-settings=setup-args=-Dvsenv=true $sdist
       - name: Test markitdown
         working-directory: packages/markitdown
         run: python -m pytest tests -q --tb=short
       - name: Test OCR
+        if: success() || failure()
         working-directory: packages/markitdown-ocr
         run: python -m pytest tests -q --tb=short
