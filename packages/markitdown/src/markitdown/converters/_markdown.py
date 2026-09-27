@@ -97,7 +97,7 @@ class _CustomMarkdown:
                 cell_blocks="text",
             ),
             escaping=Markdown.Escaping(
-                mode="all" if options.get("escape_misc") else "minimal",
+                mode="all" if options.get("escape_misc") else "none",
                 asterisks=options.get("escape_asterisks", True),
                 underscores=options.get("escape_underscores", True),
             ),
@@ -129,9 +129,6 @@ class _CustomMarkdown:
         """Same as usual converter, but removes JavaScript links and escapes URIs."""
         if not text:
             return ""
-        prefix = " " if el.text[:1].isspace() else ""
-        suffix = " " if el.text[-1:].isspace() else ""
-
         href = el.attr("href")
         title = el.attr("title")
 
@@ -144,7 +141,7 @@ class _CustomMarkdown:
                     "https",
                     "file",
                 ]:
-                    return prefix + text + suffix
+                    return text
                 href = urlunparse(
                     parsed_url._replace(
                         path=_quote_path_preserving_percent_encoded_octets(
@@ -152,8 +149,8 @@ class _CustomMarkdown:
                         )
                     )
                 )
-            except ValueError:  # It's not clear if this ever gets thrown
-                return prefix + text + suffix
+            except ValueError:
+                return text
 
         # For the replacement see #29: text nodes underscores are escaped
         if (
@@ -162,16 +159,11 @@ class _CustomMarkdown:
             and not title
             and not self._default_title
         ):
-            # Shortcut syntax
-            return "%s<%s>%s" % (prefix, href, suffix)
+            return "<%s>" % href
         if self._default_title and not title:
             title = href
         title_part = ' "%s"' % title.replace('"', r"\"") if title else ""
-        return (
-            "%s[%s](%s%s)%s" % (prefix, text, href, title_part, suffix)
-            if href
-            else text
-        )
+        return "[%s](%s%s)" % (text, href, title_part) if href else text
 
     def _convert_img(self, el: Element, text: str) -> str:
         """Same as usual converter, but removes data URIs"""
@@ -218,6 +210,4 @@ class _CustomMarkdown:
         return f"{symbol}{text}{closing}"
 
     def _convert_u(self, el: Element, text: str) -> str:
-        prefix = " " if el.text[:1].isspace() else ""
-        suffix = " " if el.text[-1:].isspace() else ""
-        return f"{prefix}<u>{text}</u>{suffix}"
+        return f"<u>{text}</u>"

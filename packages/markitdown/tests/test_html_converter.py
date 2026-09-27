@@ -30,6 +30,55 @@ def test_html_underlined_content_is_preserved(content: str, expected: str) -> No
     assert _convert_html(f"<p>First<u>{content}</u>Last</p>") == expected
 
 
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        pytest.param({}, r"[text] `code` \*star\* \_name\_", id="default"),
+        pytest.param(
+            {"escape_misc": True},
+            r"\[text\] \`code\` \*star\* \_name\_",
+            id="escape-misc",
+        ),
+        pytest.param(
+            {"escape_asterisks": False},
+            r"[text] `code` *star* \_name\_",
+            id="keep-asterisks",
+        ),
+        pytest.param(
+            {"escape_underscores": False},
+            r"[text] `code` \*star\* _name_",
+            id="keep-underscores",
+        ),
+    ],
+)
+def test_html_escaping_options(options: dict[str, bool], expected: str) -> None:
+    assert _convert_html("<p>[text] `code` *star* _name_</p>", **options) == expected
+
+
+@pytest.mark.parametrize(
+    ("href", "text", "expected"),
+    [
+        pytest.param(
+            "https://example.com", "word", "[word](https://example.com)", id="link"
+        ),
+        pytest.param(
+            "https://example.com",
+            "https://example.com",
+            "<https://example.com>",
+            id="autolink",
+        ),
+        pytest.param("javascript:alert(1)", "word", "word", id="unsafe-scheme"),
+        pytest.param("https://[", "word", "word", id="invalid-url"),
+        pytest.param("", "word", "word", id="empty-href"),
+    ],
+)
+def test_html_link_edge_spaces(href: str, text: str, expected: str) -> None:
+    assert (
+        _convert_html(f'<p>First<a href="{href}"> {text} </a>Last</p>')
+        == f"First {expected} Last"
+    )
+
+
 def test_preserves_non_utf8_percent_encoded_href_path() -> None:
     href = "https://abc.com/hist/" "%a5%c8%a5%c3%a5%d7%a5%da%a1%bc%a5%b8"
     html = f'<a href="{href}">example</a>'
